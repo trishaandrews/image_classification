@@ -17,16 +17,9 @@ class openImages:
         self.TSH = threshold
 
     def show_image(self, img, count):
-        #cv2.startWindowThread()
         cv2.imshow(self.get_label(count), img)
-        #if (cv2.waitKey(1)&0xff) == 27:
-        #    cv2.destroyAllWindows()
         cv2.waitKey(0)
-        #if cv2.waitKey(0) & 0xff == 27:
-        #    cv2.destroyAllWindows()
-        #cv2.waitKey(1)
         cv2.destroyAllWindows()
-        #cv2.waitKey(1)
 
     def get_label(self, off):
         with open(self.yfile, 'rb') as f2:
@@ -102,36 +95,15 @@ class openImages:
         gray = np.float32(gray)
         dst = cv2.cornerHarris(gray,2,3,0.04)
         
-        #result is dilated for marking the corners, not important
-        #dst = cv2.dilate(dst,None)
-        
         # Threshold for an optimal value, it may vary depending on the image.
         ret, dst = cv2.threshold(dst,self.TSH*dst.max(),255,0)
-        #threshold = self.TSH*dst.max()
         
         dst = np.uint8(dst)
-        #gray [dst>threshold] = [0,0,255]
-        #print dst, type(dst)
-        #cv2.imshow('dst',dst)
-        
-        #if cv2.waitKey(0) & 0xff == 27:
-        #    cv2.destroyAllWindows()
         return dst
 
-    #def kmeanscl(self,dat):
-    #    temp, classified_points, means = cv2.kmeans(data=dat, K=10, attempts=3, 
-    #flags=cv2.KMEANS_RANDOM_CENTERS) 
-    
-    #def sift(self,gray):
-    #    sift = cv2.xfeatures2d.SIFT_create()
-    #    kp = sift.detect(gray,None)
-    #    #img=cv2.drawKeypoints(gray,kp,flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-    #    img=cv2.drawKeypoints(gray,kp)
-    #    return img
-
-
 if __name__ == "__main__":
-    print cv2.__version__
+    #print cv2.__version__
+    #my current = v 2.4.8
     oi = openImages()
     oi.sample_images(show=True)
     full_imlist = oi.single_folds(2, lim=3)
@@ -145,8 +117,6 @@ if __name__ == "__main__":
         oi.show_image(img, ima)
         himg = oi.harris(img)
         oi.show_image(himg, ima)
-        #simg = sift(img)
-        #show_image(simg, ima)
 
     folds = oi.get_folds(lim=3)
     print folds
@@ -158,4 +128,3 @@ if __name__ == "__main__":
         oi.show_image(img, ima)
         himg = oi.harris(img)
         oi.show_image(himg, ima)
-
