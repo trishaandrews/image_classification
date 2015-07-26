@@ -1,0 +1,15 @@
+# Emacs generated files
+*~
+
+# Auto saves
+*#
+
+# Compressed files
+*.tar*
+
+# Notes and test files
+*.txt
+*.png
+
+.ipynb_checkpoints/
+stl10/
