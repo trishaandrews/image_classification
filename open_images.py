@@ -74,26 +74,27 @@ class openImages:
         fis = []
         with open(self.ffile, 'r') as inf:
             for line in inf:
+                intlist = [int(l) for l in line.split()]
                 if lim:
-                    fis.append(np.random.choice(line.split(), lim))
+                    fis.append(list(np.random.choice(intlist, lim)))
                 else:
-                    fis.append(line.split())
+                    fis.append(intlist)
         folds = tuple(fis)
         return folds
 
-    def single_folds(self, classiftype):
+    def single_folds(self, classiftype, lim=None):
         fis = []
         with open(self.ffile, 'r') as inf:
             for line in inf:
                 flist = []
                 for l in line.split():
                     ind = int(l)
-                    #print l
-                    #print type(get_label(int(l)))
-                    #print "classiftype", int(classiftype)
                     if self.get_label(ind) == str(classiftype):
                         flist.append(ind)
-                    fis.append(flist)
+                    if lim:
+                        if len(flist) >= lim:
+                            break
+                fis.append(flist)
         folds = tuple(fis)
         return folds
             
@@ -133,8 +134,9 @@ if __name__ == "__main__":
     print cv2.__version__
     oi = openImages()
     oi.sample_images(show=True)
-    #imagelist = [875]#, 4252, 410, 1471, 3904]
-    imagelist = oi.single_folds(2)[0]
+    full_imlist = oi.single_folds(2, lim=3)
+    imagelist = full_imlist[0]
+    print full_imlist
     print imagelist
     for ima in imagelist:
         img = oi.open_image(ima)
@@ -147,5 +149,13 @@ if __name__ == "__main__":
         #show_image(simg, ima)
 
     folds = oi.get_folds(lim=3)
+    print folds
     print folds[0]
+    for ima in folds[0]:
+        img = oi.open_image(ima)
+        oi.show_image(img, ima)
+        img = oi.make_gray(img)
+        oi.show_image(img, ima)
+        himg = oi.harris(img)
+        oi.show_image(himg, ima)
 
