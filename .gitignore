@@ -4,12 +4,16 @@
 # Auto saves
 *#
 
+# Python generated
+*.pyc
+
 # Compressed files
 *.tar*
 
 # Notes and test files
 *.txt
 *.png
+*.pkl
 
 .ipynb_checkpoints/
 stl10/

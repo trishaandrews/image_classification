@@ -40,7 +40,7 @@ def make_folds_table(cur, conn):
     conn.commit()
 
 def populate_fold_table(cur, conn, oi):
-    fold_data = oi.get_fold_images()
+    fold_data = oi.get_all_image_folds()
     for fd in fold_data:
         cur.execute("INSERT INTO stl_folds VALUES ( %d, %d );" %fd)
     conn.commit()
@@ -61,6 +61,27 @@ if __name__ == "__main__":
     #make_folds_table(cur, conn)
     #populate_images_table(cur, conn, trainsoi, "train")
     #populate_images_table(cur, conn, testsoi, "test")
+    #populate_fold_table(cur, conn, trainsoi)
 
     cur.close()
     conn.close()
+
+    '''
+    select byte_index, count(*) from stl_folds where byte_index > 4900 
+        group by byte_index order by count desc limit 10;
+        
+    select fold_count, count(*) as image_count from (
+           select byte_index, count(*) as fold_count from stl_folds 
+           group by byte_index)
+        as count_table group by fold_count order by image_count desc;
+    
+     fold_count | image_count 
+    ------------+-------------
+              1 |        2071
+              2 |        1482
+              3 |         968
+              4 |         359
+              5 |         101
+              6 |          13
+              7 |           6
+    '''
