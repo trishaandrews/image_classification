@@ -36,15 +36,17 @@ def unpickle(filename):
     return old_data
 
 def separate_image_label(oi, tuplelist):
+    ''' list of tuples of (image, offset). separate into lists of image arrays
+    and class labels'''
     images = []
     labels = []
-    #print tuplelist[1]
     for tl in tuplelist:
         images.append(tl[0])
         labels.append(oi.get_label(tl[1]))
     return images, labels
 
 def select_training(oi, folds=False, lim=None):
+    '''extract desired images for training data'''
     X_train = []
     y_train = []
     if folds:
@@ -57,26 +59,26 @@ def select_training(oi, folds=False, lim=None):
         #print len(X_train_folds[0]) #len of first fold
         #print type(X_train_folds[0][0]) #tuple of offset, image
         #trainoi.show_image(X_train_folds[0][0][0], X_train_folds[0][0][1]) 
-        #the above is showing individual image, image label
+        #the above would show individual image, image label
     else:
         X_train = oi.get_all_images(lim=lim)
         y_train = oi.get_all_labels(lim=lim)
-        #trainoi.show_image(X_train_full[0], 0)
         #x_train[i] is an individual image array
     return X_train, y_train, folds
 
 def verify(oi, x, y, lim, folds):
-    #print x
-    #print y
+    '''display a given training image (x) and its label (y). 
+    necessary limit on number of images to display and folds status'''
     if folds:
         for i, f in enumerate(x):
             for t in range(lim):
                 oi.show_image(x[i][t], label=y[i][t])
     else:
         for t in range(lim):
-            #print "yt:", y[t]
             oi.show_image(x[t], label=y[t])
+
 def make_harris(xs, oi):
+    ''' get harris corner features for the given list of images (xs)'''
     xsfinal = []
     for x in xs:
         img = oi.harris(x, grey=False)
@@ -84,50 +86,50 @@ def make_harris(xs, oi):
     xsfinal = np.asarray(xsfinal)
     return xsfinal
 
-def make_flat(xs, oi):
+def make_flat(xs, oi, verbose=1):
+    ''' convert the (x,y,chan) numpy array image into a flat (x*y*chan) 
+    numpy array'''
     xsf = []
     for x in xs:
         x = x.flatten()
-        #print type(x)
         xsf.append(x)
-    print "x shape", x.shape
+    if verbose == 1:
+        print "new x shape", x.shape
     xsfinal = np.asarray(xsf)
     return xsfinal
 
-def flatmodels():
+def flatmodels(verbose=True, harris=False, verify=False, lim=None):
     X_train, y_train, folds = select_training(trainoi, lim=lim)
-    #X_train = make_harris(X_train, trainoi)
-    #verify(trainoi, X_train, y_train, lim, folds)
-    X_train = make_flat(X_train, trainoi)
     X_test = testoi.get_all_images(lim=lim) #x_test[i] is an individual image array
     y_test = testoi.get_all_labels(lim=lim)
-    #X_test = make_harris(X_test, testoi)
-    #verify(testoi, X_test, y_test, lim, folds)
+    if harris:
+        X_train = make_harris(X_train, trainoi)
+        X_test = make_harris(X_test, testoi)
+    if verify and lim:
+        verify(trainoi, X_train, y_train, lim, folds)
+        verify(testoi, X_test, y_test, lim, folds)
+    elif verify and not lim:
+        print "please enter a number of images to display"
+    X_train = make_flat(X_train, trainoi)
     X_test = make_flat(X_test, testoi)
-
-    #print len(X_train), len(X_train[0])
-    print X_train.shape
-    print X_train[0].shape
-    #print X_train[0][0].shape
-    #print y_train[0]
-    print y_train.shape
+    if verbose:
+        print "X train shape:", X_train.shape
+        print "X train image shape:", X_train[0].shape
+        print "y train label shape:", y_train.shape
 
 def run_models(X_train, y_train, X_test, y_test, models, label):
     for mname, m in models.iteritems():
         print "*** %s" % mname
         t0 = time.time()
-        if mname == 'kmeans':
-            m.fit(X_train)
-        else:
-            m.fit(X_train, y_train)
-        #pred_probs[mname] = {'train': m.predict_proba(X_train),  
-        #                     'test': m.predict_proba(X_test)}
-        #pred = m.predict(X_test)
-        #prec, recall, fscore, sup = precision_recall_fscore_support(y_test, pred)
-        #scores[mname] = {'accuracy': accuracy_score(y_test, pred),
-        #                 'precision': prec,
-        #                 'recall': recall,
-        #                 'fscore': fscore}
+        m.fit(X_train, y_train)
+        pred_probs[mname] = {'train': m.predict_proba(X_train),  
+                             'test': m.predict_proba(X_test)}
+        pred = m.predict(X_test)
+        prec, recall, fscore, sup = precision_recall_fscore_support(y_test, pred)
+        scores[mname] = {'accuracy': accuracy_score(y_test, pred),
+                         'precision': prec,
+                         'recall': recall,
+                         'fscore': fscore}
         t1 = time.time()
         title = mname + "_" + str(label) + "_" + time.strftime("%d-%b-%Y-%H:%M") +".pkl"
         pickle_stuff(title, m)
@@ -137,9 +139,8 @@ def run_models(X_train, y_train, X_test, y_test, models, label):
         print s
         for n, num in score.iteritems():
             print n ,":", num
-            #print scores
 
-def run_kmeans(X_train, models, label):
+def run_kmeans(X_train, models, label, lim, k):
     for mname, m in models.iteritems():
         print "*** %s" % mname
         t0 = time.time()
@@ -148,71 +149,76 @@ def run_kmeans(X_train, models, label):
         else:
             break
         t1 = time.time()
-        title = mname + "_" + str(label) + "_" + time.strftime("%d-%b-%Y-%H:%M") +".pkl"
+        title = mname + "_" + str(label) + "_lim" + str(lim) + "_k" + str(k) + ".pkl"
+        # "_" + time.strftime("%d-%b-%Y-%H:%M") +".pkl"
         pickle_stuff(title, m)
         print "total time: {:.2f}".format(t1-t0)
+
+def run_many_kmeans(lims_=[10, 50, 100, 300, 500], ks_=[10, 50, 100, 300, 500]):
+    ''' run a series of kmeans clustering models with different numbers of 
+    training photos and clusters'''
+    lims = lims_
+    ks = ks_
+    for lim in lims:
+        for k in ks:
+            for i in range(2,12):
+                if i <=10:
+                    label = i #9 is ships
+                else:
+                    label = None
+                models = {'kmeans' : KMeans(n_clusters=k, n_init=15, n_jobs=6)}
+                ships = trainoi.get_all_images(classiftype=label, lim=lim)
+                print "num photos: ", len(ships)
+                print "k: ", k
+                print "class", str(label)
+                shipys = [label for l in range(len(ships))]
+                siftdesc = trainoi.many_sifts(ships, grey=False)
+                print siftdesc.shape
+                run_kmeans(siftdesc, models, label, lim, k) 
+
+def retrieve_label_kmns(lim=50, k=100):
+    '''retrieve trained kmeans models for each image class using given numbers 
+    of training images (lim) and clusters (k)'''
+    #lim = lim_
+    #k = k_
+    kmnmodels = {}
+    kmncenters = {}
+    for c in range(1,11):
+        label = str(c)
+        name = "kmeans" + label
+        filen = kmeansdir + label + "/kmeans_" + label + "_lim" + str(lim) + "_k" + str(k) + ".pkl"
+        kmnmodels[name] = unpickle(filen)
+        kmncenters[name] = kmnmodels[name].cluster_centers_
+    return kmnmodels, kmncenters
+
+kmeansdir = "./kmeans_cl/kmeans_cl"
 
 trainoi = OpenImages()
 testoi = OpenImages(xfl="test_X.bin", yfl="test_y.bin")
 
-models = {#'logistic': LogisticRegression(dual=True),
-          #'rf': RandomForestClassifier(),
-          'kmeans' : KMeans(n_clusters=200, n_init=15, verbose=1, n_jobs=6),
-          #'knn': KNeighborsClassifier(),
-          #'svc': SVC(probability=True, verbose=True),
-          #'tree': DecisionTreeClassifier(),
-          #'gnb': GaussianNB()
-}
+#models = {#'logistic': LogisticRegression(dual=True),
+#          #'rf': RandomForestClassifier(),
+#          #'knn': KNeighborsClassifier(),
+#          #'svc': SVC(probability=True, verbose=True),
+#          #'tree': DecisionTreeClassifier(),
+#          #'gnb': GaussianNB()
+#}
 
 pred_probs = {}
 preds = {}
 scores = {}
 
+kmnmodels, centers = retrieve_kmns()
+print centers["kmeans2"]
 
-lim = 100
-for i in range(1,11):
-    label = i #9 is ships
-    #ship_folds = trainoi.single_folds(9, lim=lim) 
-    #ship_single_inds = ship_folds[0] #just the first fold for now
-    
-    ships = trainoi.get_all_images(classiftype=label, lim=lim)
-    print len(ships)
-    shipys = [label for l in range(len(ships))]
-    #for s in ship_single_inds:
-    #    im = trainoi.open_image(s)
-    #    label = trainoi.get_label(s)
-    #    ships.append(im)
-    #    shipys.append(label)
-    
-    #print type(ship_single[0])
-    
-    siftdesc = trainoi.many_sifts(ships, grey=False)
-    
-    #X_test = testoi.get_all_images(lim=lim) #x_test[i] is an individual image array
-    #y_test = testoi.get_all_labels(lim=lim)
-    #X_test = make_harris(X_test, testoi)
-    #verify(testoi, X_test, y_test, lim, folds)
-    #X_test = make_flat(X_test, testoi)
-    #X_test = testoi.many_sifts(X_test, grey=False)
-    
-    print siftdesc.shape
-    run_kmeans(siftdesc, models, label) 
-#trainoi.cv2_kmeans(siftdesc, 200, 15)
+off = 0
+testimage = testoi.open_image(off)
+testlabel = testoi.get_label(off)
+                
 
-#(n_clusters=8, init='k-means++', n_init=10, max_iter=300, tol=0.0001, precompute_distances='auto', verbose=0, random_state=None, copy_x=True, n_jobs=1)
+
+
 '''
-for mname, m in models.iteritems():
-    print "*** %s" % mname
-    m.fit(X_train, y_train)
-    pred_probs[mname] = {'train': m.predict_proba(X_train),  
-                         'test': m.predict_proba(X_test)}
-    pred = m.predict(X_test)
-    prec, recall, fscore, sup = precision_recall_fscore_support(y_test, pred)
-    scores[mname] = {'accuracy': accuracy_score(y_test, pred),
-                     'precision': prec,
-                     'recall': recall,
-                     'fscore': fscore}
-
 #if __name__=="__main__":
 #    oi = OpenImages()
 #    #oi.sample_images(show=True)
