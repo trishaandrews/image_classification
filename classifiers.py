@@ -3,6 +3,7 @@ import pickle
 import scipy
 import numpy as np
 
+from os import walk
 from operator import itemgetter
 from collections import Counter
 
@@ -11,7 +12,7 @@ from sklearn.metrics import accuracy_score
 #from sklearn.learning_curve import learning_curve
 #from sklearn.cross_validation import cross_val_score
 from sklearn.preprocessing import scale
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_curve, auc
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_curve, auc, confusion_matrix
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -31,12 +32,12 @@ from open_images import OpenImages
 #        self.oi = OpenImages()
 
 def pickle_stuff(filename, data):
-    ''' open file '''
+    ''' save file '''
     with open(filename, 'w') as picklefile:
         pickle.dump(data, picklefile)
 
 def unpickle(filename):
-    ''' save file '''
+    ''' open file '''
     with open(filename, 'r') as picklefile:
         old_data = pickle.load(picklefile)
     return old_data
@@ -208,6 +209,31 @@ def retrieve_label_kmeans(lim, k, kmeansdir="./kmeans_cl/kmeans_cl"):
         kmncenters.append(kmnmodels[c].cluster_centers_)
     return kmnmodels, kmncenters
 
+def retrieve_models(dirpath):
+    files = []
+    modellist = []
+    for (dirpath, dirnames, filenames) in walk(dirpath):
+        files.extend(filenames)
+        break
+    for f in files:
+        m = unpickle(f)
+        modellist.append(m)
+    return m
+
+def make_confustion_matrix(y_test, y_pred):
+    # Compute confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    
+    print cm
+    
+    # Show confusion matrix in a separate window
+    plt.matshow(cm)
+    plt.title('Confusion matrix')
+    plt.colorbar()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    plt.show()
+
 def combine_centers(centers):
     ''' the idea is to combine all centers in the same space in order to 
     calculate distance, but I'm unsure how to maintain class lables for 
@@ -287,7 +313,7 @@ scores = {}
 
 class_labels = range(1,11)
 
-limlist = [10,50,100,300]
+limlist = [10,50,100,300,500]
 klist = [10,50,100,300]
 for k in klist:
     for lim in limlist:
@@ -321,7 +347,7 @@ for k in klist:
         
         xtestcountlist = []
         #ytestlist = []
-        testlim = 1000
+        testlim = 8000
         xts = testoi.get_all_images(lim=testlim)
         ytestlist = testoi.get_all_labels(lim=testlim)
         for x in xts:
@@ -340,6 +366,27 @@ for k in klist:
         print "len ytest", len(ytestlist)
 
         run_models(xcountlist, yslist, xtestcountlist, ytestlist, models, verbose=2)
+
+
+def run_confusion_matrix(filepath, testlim=1000):
+    m = unpickle(filepath)
+    xts = testoi.get_all_images(lim=testlim)
+    X_test = []
+    for x in xts:
+            gray = testoi.make_gray(x)
+            img, testsifts = testoi.sift(gray)
+            indcounts = [0 for cl in class_labels+[1]]
+            counts = slow_feature_matching(testsifts, centers)
+            countsum = float(sum(counts.values()))
+            for name, c in counts.iteritems():
+                indcounts[name] = c/countsum
+            X_test.append(indcounts)
+    y_pred = m.predict(X_test)
+    y_test = testoi.get_all_labels(lim=testlim)
+    make_confustion_matrix(y_test, y_pred)
+
+def get_sift_xs_unlabeled(oi):
+    pass
 
 #off = 6
 #testimage = testoi.open_image(off)
