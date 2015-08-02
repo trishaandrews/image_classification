@@ -180,10 +180,10 @@ def run_many_kmeans(oi, lims_=[10, 50, 100, 300, 500],
                 else:
                     label = None
                 models = {'kmeans' : KMeans(n_clusters=k, n_init=15, n_jobs=6)}
-                siftdesc = get_sift_xs(oi, label, lim)
+                siftdesc = get_kmeans_sift_xs(oi, label, lim)
                 run_kmeans(siftdesc, models, label, lim, k) 
 
-def get_sift_xs(oi, label, lim=None, verbose=0):
+def get_kmeans_sift_xs(oi, label, lim=None, verbose=0):
     ships = oi.get_all_images(classiftype=label, lim=lim)
     shipys = [label for l in range(len(ships))]
     siftdesc = oi.many_sifts(ships, grey=False)
@@ -273,7 +273,6 @@ def slow_feature_matching(testsifts, centers, verbose=0):
         del sorteddists[minindex]
         minindexes.append(minindex)
 
-    #print minindexes
     labels = []
     for minind in minindexes:
         for l in range(1, 11):
@@ -283,17 +282,9 @@ def slow_feature_matching(testsifts, centers, verbose=0):
 
     #print labels
     count = Counter(labels)
-    #counts = count.values()
-    #print len(counts)
-    #countsum = float(sum(counts))
-    #freq = [c / countsum for c in counts]
-    #print type(count), type(counts), type(countsum), type(freq)
     if verbose > 0:
         print count
     return count
-
-#print Counter(labels)
-        
 
 trainoi = OpenImages()
 testoi = OpenImages(xfl="test_X.bin", yfl="test_y.bin")
@@ -317,51 +308,20 @@ limlist = [10,50,100,300,500]
 klist = [10,50,100,300]
 for k in klist:
     for lim in limlist:
-        #lim = 50
-        #k = 10
         print "lim:", lim, "k:", k
         kmnmodels, centers = retrieve_label_kmeans(lim, k)
-        #print centers[0], centers[0].shape
-        #print centers[1], centers[1].shape
-        xcountlist = []
+        xlist = []
         yslist = []
         for l in class_labels:
-            #xs, ys = get_sift_xs(trainoi, label=l, lim=lim)
-            xs = trainoi.get_all_images(classiftype=l, lim=lim)
-            ys = [l for lb in range(len(xs))]
-            for x in xs:
-                gray = trainoi.make_gray(x)
-                img, testsifts = trainoi.sift(gray)
-                #print x.shape
-                indcounts = [0 for cl in class_labels+[1]]
-                counts = slow_feature_matching(testsifts, centers)
-                countsum = float(sum(counts.values()))
-                for name, c in counts.iteritems():
-                    indcounts[name] = c/countsum
-                #print "true label", l
-                #print indcounts
-                xcountlist.append(indcounts)
+            xs, ys = get_sift_xs(trainoi, lim=lim, label=l)
+            xlist += xs
             yslist += ys
         print "len xtrain", len(xcountlist), np.asarray(xcountlist).shape
         print "len ytrain", len(yslist)
         
-        xtestcountlist = []
-        #ytestlist = []
         testlim = 8000
-        xts = testoi.get_all_images(lim=testlim)
         ytestlist = testoi.get_all_labels(lim=testlim)
-        for x in xts:
-            gray = testoi.make_gray(x)
-            img, testsifts = testoi.sift(gray)
-            #print x.shape
-            indcounts = [0 for cl in class_labels+[1]]
-            counts = slow_feature_matching(testsifts, centers)
-            countsum = float(sum(counts.values()))
-            for name, c in counts.iteritems():
-                indcounts[name] = c/countsum
-            #print "true label", l
-            #print indcounts
-            xtestcountlist.append(indcounts)
+        xtestcountlist = get_sift_xs(testoi, lim=testlim)
         print "len xtest", len(xtestcountlist), np.asarray(xtestcountlist).shape
         print "len ytest", len(ytestlist)
 
@@ -370,23 +330,31 @@ for k in klist:
 
 def run_confusion_matrix(filepath, testlim=1000):
     m = unpickle(filepath)
-    xts = testoi.get_all_images(lim=testlim)
-    X_test = []
-    for x in xts:
-            gray = testoi.make_gray(x)
-            img, testsifts = testoi.sift(gray)
-            indcounts = [0 for cl in class_labels+[1]]
-            counts = slow_feature_matching(testsifts, centers)
-            countsum = float(sum(counts.values()))
-            for name, c in counts.iteritems():
-                indcounts[name] = c/countsum
-            X_test.append(indcounts)
+    X_test = get_sift_xs(testoi, lim=testlim)
     y_pred = m.predict(X_test)
     y_test = testoi.get_all_labels(lim=testlim)
     make_confustion_matrix(y_test, y_pred)
 
-def get_sift_xs_unlabeled(oi):
-    pass
+def get_sift_xs(oi, lim=0, label=None):
+    '''get sift features for all images up to a limit (lim 0 is no limit).
+    returns ys also, if the label is specified'''
+    xlist = []
+    xs = oi.get_all_images(classiftype=label, lim=lim)
+    for x in xs:
+        gray = oi.make_gray(x)
+        img, testsifts = testoi.sift(gray)
+        indcounts = [0 for cl in class_labels+[1]]
+        counts = slow_feature_matching(testsifts, centers)
+        countsum = float(sum(counts.values()))
+        for name, c in counts.iteritems():
+            indcounts[name] = c/countsum
+        xlist.append(indcounts)
+    if label:
+        ys = [l for lb in range(len(xs))]
+        return xlist, ys
+    else:
+        return xlist
+    
 
 #off = 6
 #testimage = testoi.open_image(off)
