@@ -45,7 +45,7 @@ class OpenImages:
                 count += 1
         return class_names
             
-    def get_all_images(self, show=False, classiftype=None, lim=None):
+    def get_all_images(self, show=False, classiftype=None, lim=0):
         images = []
         with open(self.xfile, 'rb') as f:
             count = 0
@@ -64,7 +64,7 @@ class OpenImages:
                 if show:
                     self.show_image(img, count)
                 count +=1
-                if lim:
+                if lim != 0:
                     if len(images) >= lim:
                         break
         images = np.asarray(images)
@@ -86,19 +86,19 @@ class OpenImages:
         gimg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         return gimg
 
-    def get_folds(self, lim=None):
+    def get_folds(self, lim=0):
         fis = []
         with open(self.ffile, 'r') as inf:
             for line in inf:
                 intlist = [int(l) for l in line.split()]
-                if lim:
+                if lim != 0:
                     fis.append(list(np.random.choice(intlist, lim)))
                 else:
                     fis.append(intlist)
         folds = np.asarray(fis)
         return folds
 
-    def single_folds(self, classiftype, lim=None):
+    def single_folds(self, classiftype, lim=0):
         fis = []
         with open(self.ffile, 'r') as inf:
             for line in inf:
@@ -107,7 +107,7 @@ class OpenImages:
                     ind = int(l)
                     if self.get_label(ind) == classiftype:
                         flist.append(ind)
-                    if lim:
+                    if lim != 0:
                         if len(flist) >= lim:
                             break
                 fis.append(flist)
@@ -117,7 +117,7 @@ class OpenImages:
     #def get_single_class_images(self, classiftype, lim=None):
         
         
-    def get_all_image_folds(self, lim=None):
+    def get_all_image_folds(self, lim=0):
         fold_data = []
         folds = self.get_folds(lim)  #([f0],[f1],...)
         for i, f in enumerate(folds): #[f0],[f1],..
@@ -126,7 +126,7 @@ class OpenImages:
                 fold_data.append((off, fold_num))
         return fold_data
 
-    def get_fold_images(self, lim=None):
+    def get_fold_images(self, lim=0):
         fold_data = []
         folds = self.get_folds(lim)
         for f in folds:
@@ -137,14 +137,14 @@ class OpenImages:
             fold_data = np.asarray(fold_data)
         return fold_data
     
-    def get_all_labels(self, lim=None):
+    def get_all_labels(self, lim=0):
         labels = []
         with open(self.yfile, 'rb') as df:
             for i in iter(partial(df.read, 1), ''):
                 name = np.fromstring(i, dtype=np.uint8)
                 nm =  name[0].astype(int)
                 labels.append(nm)
-                if lim:
+                if lim != 0:
                     if len(labels) >= lim:
                         #print labels
                         break

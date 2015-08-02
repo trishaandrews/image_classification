@@ -52,7 +52,7 @@ def separate_image_label(oi, tuplelist):
         labels.append(oi.get_label(tl[1]))
     return images, labels
 
-def select_training(oi, folds=False, lim=None):
+def select_training(oi, folds=False, lim=0):
     '''extract desired images for training data'''
     X_train = []
     y_train = []
@@ -105,7 +105,7 @@ def make_flat(xs, oi, verbose=0):
     xsfinal = np.asarray(xsf)
     return xsfinal
 
-def flatmodels(verbose=0, harris=False, verify=False, lim=None):
+def flatmodels(verbose=0, harris=False, verify=False, lim=0):
     X_train, y_train, folds = select_training(trainoi, lim=lim)
     X_test = testoi.get_all_images(lim=lim) 
     #x_test[i] is an individual image array
@@ -183,7 +183,7 @@ def run_many_kmeans(oi, lims_=[10, 50, 100, 300, 500],
                 siftdesc = get_kmeans_sift_xs(oi, label, lim)
                 run_kmeans(siftdesc, models, label, lim, k) 
 
-def get_kmeans_sift_xs(oi, label, lim=None, verbose=0):
+def get_kmeans_sift_xs(oi, label, lim=0, verbose=0):
     ships = oi.get_all_images(classiftype=label, lim=lim)
     shipys = [label for l in range(len(ships))]
     siftdesc = oi.many_sifts(ships, grey=False)
