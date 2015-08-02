@@ -2,10 +2,12 @@ import time
 import pickle
 import scipy
 import numpy as np
+import os.path
 
 from os import walk
 from operator import itemgetter
 from collections import Counter
+from random import shuffle
 
 #from sklearn.cross_validation import train_test_split
 from sklearn.metrics import accuracy_score
@@ -127,6 +129,8 @@ def flatmodels(verbose=0, harris=False, verify=False, lim=0):
 
 def run_models(X_train, y_train, X_test, y_test, models, 
                testdir="./testparams/", verbose=0):
+    if not os.path.exists(testdir):
+        os.makedirs(testdir)
     for mname, m in models.iteritems():
         if verbose > 0:
             print "*** %s" % mname
@@ -201,7 +205,7 @@ def retrieve_label_kmeans(lim, k, kmeansdir="./kmeans_cl/kmeans_cl"):
     #k = 100 #=k_
     kmnmodels = [0]
     kmncenters = [0]
-    for c in range(1,11):
+    for c in range(1,11):#indexes start at 1 to preserve lable relations
         label = str(c)
         name = "kmeans" + label
         filen = kmeansdir + label + "/kmeans_" + label + "_lim" + str(lim) + "_k" + str(k) + ".pkl"
@@ -248,40 +252,73 @@ def combine_centers(centers):
     print "shape of all centers:", allc.shape
 
 def slow_feature_matching(testsifts, centers, verbose=0):
+    '''
+    testsifts is all sift features for a single image
+    centers is a list of kmeans centers per class
+    len(centers) is len number class labels + 1 (for the empty 0 index)
+    centers[0] is 0, there is no image class label 0
+    centers[1] is list of all kmeans centers that were clustered from the
+    label 1 (airplane) image features
+    '''
     mins = []
     sorteddists = []
-    
-    #for t in testsifts:
-    features = testsifts.shape[0]
+    distsdlist = []
+    alldistslist = []
+    features = testsifts.shape[0] #number of features in image
+    classmodels = range(1, len(centers)) #centers start at 1 to maintain labels 
     if verbose > 1:
         print "num of features:", features
-    for c in range(1, len(centers)):
+    for c in classmodels:
         dists = scipy.spatial.distance.cdist(testsifts,centers[c])
+        #calculate distances between each feature and all centers for class [c]
+        #dists:
+        #     cen1 cen2 cen3 ... cenk
+        # f1  d11  d12       ... d1k     
+        # f2  d21  d22       ... d2k              
+        # ... ...  ...       ... ...
+        # ff  df1  df2       ... dfk
         if verbose > 2:
-            print "shape testfeatures", testsifts.shape
-            print "shape center:", centers[c].shape
-            print "shape dists:", dists.shape
-        for d in dists:
-            d = d.flatten()
+            print "shape testfeatures", testsifts.shape #(features, 128)
+            print "shape center:", centers[c].shape #(centers, 128)
+            print "shape dists:", dists.shape #(features, centers)
+        for d in dists: #each row is one feature, for featuredist in dist
+            #d = d.flatten() #already flat?
             d = d.tolist()
+            distsdlist.append(d) #one feature, len k
             dist = sorted(d)
             sorteddists.append(dist)
+        alldistslist.append(dists.flatten().tolist()) 
 
-    minindexes = []
+    # alldistslist is rows of len features * centers
+    # d11 d12 ... d1k d21 d22 ... d2k ... df1 df2 ... dfk
+    #distsdlist parallels sorteddists, but is unsorted
+    #distsdlist:
+    #      cen1 cen2 cen3 ... cenk
+    # f1m1 d111 d112      ... d11k
+    # f2m1 d211 d212      ... d21k
+    # ...  ...  ...       ... ...
+    # ffm1 df11 df12      ... df1k
+    # f1m2 d121 d122      ... d12k
+    # f2m2 d221 d222      ... d22k
+    # ...  ...  ...       ... ...
+    # ffm2 df21 df22      ... df2k
+    # ...  ...  ...       ... ...
+    # ffmm dfm1 dfm2      ... dfmk
+    #I need to trace min distance back to both original model (airplane, etc)
+    #and specific cluster center within it.
+    featurelist = []
     for f in range(features):
-        minindex = sorteddists.index(min(sorteddists))
-        del sorteddists[minindex]
+        featuremodelrow = []
+        for m in range(10): #number of classes/labels
+            featuremodelrow += distsdlist[f+(m*features)]
+        featurelist.append(featuremodelrow)
+       
+    minindexes = []
+    for f in featurelist:
+        minindex = f.index(min(f))
         minindexes.append(minindex)
+    count = Counter(minindexes)
 
-    labels = []
-    for minind in minindexes:
-        for l in range(1, 11):
-            if minind <= l*features:
-                labels.append(l)
-                break
-
-    #print labels
-    count = Counter(labels)
     if verbose > 0:
         print count
     return count
@@ -289,12 +326,12 @@ def slow_feature_matching(testsifts, centers, verbose=0):
 trainoi = OpenImages()
 testoi = OpenImages(xfl="test_X.bin", yfl="test_y.bin")
 
-models = {'logistic': LogisticRegression(dual=True),
+models = {'logistic': LogisticRegression(),#dual=True),
           'rf': RandomForestClassifier(),
-          #'knn': KNeighborsClassifier(),
-          #'svc': SVC(probability=True, verbose=True),
+          #'knn': KNeighborsClassifier(), #takes too long
+          #'svc': SVC(probability=True, verbose=True), #takes too long
           'tree': DecisionTreeClassifier(),
-          #'extrees': ExtraTreesRegressor(),
+          #'extrees': ExtraTreesRegressor(), #just not working
           'gnb': GaussianNB(),
           'mnb': MultinomialNB()
 }
@@ -304,29 +341,32 @@ scores = {}
 
 class_labels = range(1,11)
 
-limlist = [10,50,100,300,500]
-klist = [10,50,100,300]
-for k in klist:
-    for lim in limlist:
-        print "lim:", lim, "k:", k
-        kmnmodels, centers = retrieve_label_kmeans(lim, k)
-        xlist = []
-        yslist = []
-        for l in class_labels:
-            xs, ys = get_sift_xs(trainoi, lim=lim, label=l)
-            xlist += xs
-            yslist += ys
-        print "len xtrain", len(xcountlist), np.asarray(xcountlist).shape
-        print "len ytrain", len(yslist)
-        
-        testlim = 8000
-        ytestlist = testoi.get_all_labels(lim=testlim)
-        xtestcountlist = get_sift_xs(testoi, lim=testlim)
-        print "len xtest", len(xtestcountlist), np.asarray(xtestcountlist).shape
-        print "len ytest", len(ytestlist)
+def run_many_models(limlist=[10,50,100,300,500], klist=[10,50,100,300], 
+                    testlim=1000):
+    for k in klist:
+        for lim in limlist:
+            print "lim:", lim, "k:", k
+            kmnmodels, centers = retrieve_label_kmeans(lim, k)
+            xlist = []
+            yslist = []
+            for l in class_labels:
+                xs, ys = get_sift_xs(trainoi, centers, lim=lim, label=l)
+                xlist += xs
+                yslist += ys
+            print "len xtrain", len(xlist), np.asarray(xlist).shape
+            print "len ytrain", len(yslist)
+            xsys = zip(xlist, yslist)
+            shuffle(xsys)
+            xsyssep =zip(*xsys)
+            xlist = xsyssep[0]
+            yslist = xsyssep[1]
+            print yslist
+            ytestlist = testoi.get_all_labels(lim=testlim)
+            xtestcountlist = get_sift_xs(testoi, centers, lim=testlim)
+            print "len xtest", len(xtestcountlist), np.asarray(xtestcountlist).shape
+            print "len ytest", len(ytestlist)
 
-        run_models(xcountlist, yslist, xtestcountlist, ytestlist, models, verbose=2)
-
+            run_models(xlist, yslist, xtestcountlist, ytestlist, models, verbose=2)
 
 def run_confusion_matrix(filepath, testlim=1000):
     m = unpickle(filepath)
@@ -335,7 +375,7 @@ def run_confusion_matrix(filepath, testlim=1000):
     y_test = testoi.get_all_labels(lim=testlim)
     make_confustion_matrix(y_test, y_pred)
 
-def get_sift_xs(oi, lim=0, label=None):
+def get_sift_xs(oi, centers, lim=0, label=None):
     '''get sift features for all images up to a limit (lim 0 is no limit).
     returns ys also, if the label is specified'''
     xlist = []
@@ -343,31 +383,37 @@ def get_sift_xs(oi, lim=0, label=None):
     for x in xs:
         gray = oi.make_gray(x)
         img, testsifts = testoi.sift(gray)
-        indcounts = [0 for cl in class_labels+[1]]
+        indcounts = [0 for cl in range(len(centers[1])*10)] 
         counts = slow_feature_matching(testsifts, centers)
         countsum = float(sum(counts.values()))
         for name, c in counts.iteritems():
             indcounts[name] = c/countsum
         xlist.append(indcounts)
     if label:
-        ys = [l for lb in range(len(xs))]
+        ys = [label for l in range(len(xs))]
         return xlist, ys
     else:
         return xlist
-    
+        
 
-#off = 6
-#testimage = testoi.open_image(off)
-#testlabel = testoi.get_label(off)
-#print "test label:", testlabel
+run_many_models(limlist=[50], klist=[100], testlim=1000)
 
-#testimage = testoi.make_gray(testimage)
-#img, testsifts = testoi.sift(testimage)
+'''
+lim = 100
+k = 50
+off = 0
+testimage = testoi.open_image(off)
+testlabel = testoi.get_label(off)
+print "test label:", testlabel
+
+testimage = testoi.make_gray(testimage)
+img, testsifts = testoi.sift(testimage)
 #print testsifts[0]
 
-#counts = slow_feature_matching(centers)
-        
-    
+kmnmodels, centers = retrieve_label_kmeans(lim, k)
+counts = slow_feature_matching(testsifts, centers, verbose=2)
+'''
+
 '''
 if __name__=="__main__":
     oi = OpenImages()
