@@ -27,6 +27,7 @@ from sklearn.ensemble import ExtraTreesRegressor
 from sklearn.cluster import KMeans
 
 from open_images import OpenImages
+import graphs
 
 #class Classifiers:
 
@@ -128,9 +129,10 @@ def flatmodels(verbose=0, harris=False, verify=False, lim=0):
         print "y train label shape:", y_train.shape
 
 def run_models(X_train, y_train, X_test, y_test, models, 
-               testdir="./testparams/", verbose=0):
+               testdir="./testparams/", lim="", k="", verbose=0):
     if not os.path.exists(testdir):
         os.makedirs(testdir)
+
     for mname, m in models.iteritems():
         if verbose > 0:
             print "*** %s" % mname
@@ -145,8 +147,13 @@ def run_models(X_train, y_train, X_test, y_test, models,
                          'recall': recall,
                          'fscore': fscore}
         t1 = time.time()
-        title = testdir + mname + "_" + time.strftime("%d-%b-%Y-%H:%M") +".pkl"
+        title = testdir + mname + "_lim" + str(lim) + "_k" + str(k) 
+        #time.strftime("%d-%b-%Y-%H:%M") +".pkl"
         pickle_stuff(title, m)
+        pickle_stuff(title + "_scores", scores[mname])
+        pickle_stuff(title + "_pred", pred)
+        pickle_stuff(title + "_pred_probs", pred_probs)
+        print lim, k, mname, scores[mname]['accuracy']
         if verbose > 0:
             print "total time: {:.2f}".format(t1-t0)
     if verbose == 2:
@@ -224,20 +231,6 @@ def retrieve_models(dirpath):
         modellist.append(m)
     return m
 
-def make_confustion_matrix(y_test, y_pred):
-    # Compute confusion matrix
-    cm = confusion_matrix(y_test, y_pred)
-    
-    print cm
-    
-    # Show confusion matrix in a separate window
-    plt.matshow(cm)
-    plt.title('Confusion matrix')
-    plt.colorbar()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    plt.show()
-
 def combine_centers(centers):
     ''' the idea is to combine all centers in the same space in order to 
     calculate distance, but I'm unsure how to maintain class lables for 
@@ -285,9 +278,9 @@ def slow_feature_matching(testsifts, centers, verbose=0):
             #d = d.flatten() #already flat?
             d = d.tolist()
             distsdlist.append(d) #one feature, len k
-            dist = sorted(d)
-            sorteddists.append(dist)
-        alldistslist.append(dists.flatten().tolist()) 
+            #dist = sorted(d)
+            #sorteddists.append(dist)
+        #alldistslist.append(dists.flatten().tolist()) 
 
     # alldistslist is rows of len features * centers
     # d11 d12 ... d1k d21 d22 ... d2k ... df1 df2 ... dfk
@@ -323,29 +316,11 @@ def slow_feature_matching(testsifts, centers, verbose=0):
         print count
     return count
 
-trainoi = OpenImages()
-testoi = OpenImages(xfl="test_X.bin", yfl="test_y.bin")
-
-models = {'logistic': LogisticRegression(),#dual=True),
-          'rf': RandomForestClassifier(),
-          #'knn': KNeighborsClassifier(), #takes too long
-          #'svc': SVC(probability=True, verbose=True), #takes too long
-          'tree': DecisionTreeClassifier(),
-          #'extrees': ExtraTreesRegressor(), #just not working
-          'gnb': GaussianNB(),
-          'mnb': MultinomialNB()
-}
-pred_probs = {}
-preds = {}
-scores = {}
-
-class_labels = range(1,11)
-
 def run_many_models(limlist=[10,50,100,300,500], klist=[10,50,100,300], 
-                    testlim=1000):
+                    testlim=1000, testdir="./testparams/"):
     for k in klist:
         for lim in limlist:
-            print "lim:", lim, "k:", k
+            #print "lim:", lim, "k:", k
             kmnmodels, centers = retrieve_label_kmeans(lim, k)
             xlist = []
             yslist = []
@@ -353,27 +328,20 @@ def run_many_models(limlist=[10,50,100,300,500], klist=[10,50,100,300],
                 xs, ys = get_sift_xs(trainoi, centers, lim=lim, label=l)
                 xlist += xs
                 yslist += ys
-            print "len xtrain", len(xlist), np.asarray(xlist).shape
-            print "len ytrain", len(yslist)
+            #print "len xtrain", len(xlist), np.asarray(xlist).shape
+            #print "len ytrain", len(yslist)
             xsys = zip(xlist, yslist)
             shuffle(xsys)
             xsyssep =zip(*xsys)
             xlist = xsyssep[0]
             yslist = xsyssep[1]
-            print yslist
+            #print yslist
             ytestlist = testoi.get_all_labels(lim=testlim)
             xtestcountlist = get_sift_xs(testoi, centers, lim=testlim)
-            print "len xtest", len(xtestcountlist), np.asarray(xtestcountlist).shape
-            print "len ytest", len(ytestlist)
+            #print "len xtest", len(xtestcountlist), np.asarray(xtestcountlist).shape
+            #print "len ytest", len(ytestlist)
 
-            run_models(xlist, yslist, xtestcountlist, ytestlist, models, verbose=2)
-
-def run_confusion_matrix(filepath, testlim=1000):
-    m = unpickle(filepath)
-    X_test = get_sift_xs(testoi, lim=testlim)
-    y_pred = m.predict(X_test)
-    y_test = testoi.get_all_labels(lim=testlim)
-    make_confustion_matrix(y_test, y_pred)
+            run_models(xlist, yslist, xtestcountlist, ytestlist, models, testdir=testdir, lim=lim, k=k)
 
 def get_sift_xs(oi, centers, lim=0, label=None):
     '''get sift features for all images up to a limit (lim 0 is no limit).
@@ -394,9 +362,47 @@ def get_sift_xs(oi, centers, lim=0, label=None):
         return xlist, ys
     else:
         return xlist
-        
 
-run_many_models(limlist=[50], klist=[100], testlim=1000)
+def run_confusion_matrix(filepath, lim, k, testlim=1000):
+    m = unpickle(filepath)
+    mod, centers = retrieve_label_kmeans(lim, k)
+    #centers = m.cluster_centers_
+    X_test = get_sift_xs(testoi, centers, lim=testlim)
+    print len(X_test)
+    y_pred = m.predict(X_test)
+    print len(y_pred)
+    y_test = testoi.get_all_labels(lim=testlim)
+    print len(y_test)
+    graphs.make_confustion_matrix(y_test, y_pred)
+        
+trainoi = OpenImages()
+testoi = OpenImages(xfl="test_X.bin", yfl="test_y.bin")
+
+models = {'logreg': LogisticRegression(),#dual=True),
+          'rf': RandomForestClassifier(),
+          #'knn': KNeighborsClassifier(), #takes too long
+          #'svc': SVC(probability=True, verbose=True), #takes too long
+          'tree': DecisionTreeClassifier(),
+          #'extrees': ExtraTreesRegressor(), #just not working
+          'gnb': GaussianNB(),
+          'mnb': MultinomialNB()
+}
+pred_probs = {}
+preds = {}
+scores = {}
+
+class_labels = range(1,11)
+
+#graphs.run_accuracies(show=True)
+#run_confusion_matrix("./newparams1000_2/mnb_lim300_k50", 300, 50)
+
+
+print "many models 1000"
+print "lim k model accuracy"
+run_many_models(testlim=1000, testdir="./newparams1000_2/")
+print "many models 8000"
+print "lim k model accuracy"
+run_many_models(testlim=8000, testdir="./newparams8000_2/")
 
 '''
 lim = 100
